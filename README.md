@@ -11,6 +11,8 @@ The design decisions are described in [DESIGN.md](DESIGN.md).
 > on behalf of [mandelsoft](https://github.com/mandelsoft), who reviews and
 > accepts the changes. Tests and documentation (this README, the godoc and
 > [DESIGN.md](DESIGN.md)) are kept consistent with the code for every change.
+> The conversation leading to the project and its changes is recorded in
+> [CONVERSATION.md](CONVERSATION.md).
 
 ## Why a Tool?
 
@@ -57,7 +59,7 @@ with the stored one and reports a category per package:
 | `SAME`     | identical states and transitions | no |
 | `TIMING`   | identical after normalizing white space, for example columns shifted by values of other lengths | no |
 | `SAMPLING` | the same line segments (texts with output format), only in other combinations or with other transitions | no |
-| `VALUES`   | the same line segments up to the values of numbers, for example random values chosen by the program | no (with `-strict`: yes) |
+| `VALUES`   | the same line segments up to values (numbers, dates, times and durations), for example random values chosen by the program | no (with `-strict`: yes) |
 | `FORMAT`   | identical texts (up to the values of numbers) with other output formats | yes |
 | `TEXT`     | missing or additional texts | yes |
 | `MISSING`  | no file with the expected behaviour | yes |
@@ -81,8 +83,19 @@ starting there (`-` is the terminal default, `fg=32` the foreground color code 3
 Programs often use random values, for example to simulate the duration of
 tasks. If several goroutines share a random number generator, even a fixed seed
 does not determine which task gets which value. Such differences are reported as
-`VALUES`: the lines are identical up to the values of numbers. With the option
-`-strict`, they are failures, for programs whose numbers must be reproducible.
+`VALUES`: the lines are identical up to values. Values are recognized in this order:
+
+1. Dates and times formatted with a layout of the Go package `time`: all standard layouts
+   (for example `RFC3339`, `RFC1123`, `ANSIC`, `Kitchen`, `DateTime`) and the layouts given
+   with the option `-layout` (in Go layout notation, for example `-layout "_2 January 2006"`).
+   Names of months, weekdays and time zones are only recognized as part of such a date.
+2. Durations in the format of Go (`time.Duration`), for example `1h2m3.5s` or `250ms`.
+3. Other values: an optionally signed number followed by further numbers separated by
+   `.`, `,`, `:`, `/` or `-`, for example `12`, `-3`, `1.5`, `2026-11-07`, `12:05` or `1:02:03.5`.
+
+A value is compared as a whole, so that values with a different number of parts
+(`1:05` and `1:02:03`) are accepted. With the option `-strict`, such differences
+are failures, for programs whose values must be reproducible.
 
 Options:
 
@@ -93,6 +106,7 @@ Options:
 | `-parallel n` | 4 | number of packages processed in parallel |
 | `-mask regexp=replacement` | | additional mask for timing dependent values (repeatable) |
 | `-env NAME=value` | | additional environment variable for the runs (repeatable) |
+| `-layout layout` | | additional layout of the Go package `time` for dates recognized as values (repeatable) |
 | `-cols n`, `-rows n` | 160, 50 | size of the pseudo terminal |
 | `-timeout d` | 3m | maximum duration of a run |
 | `-details n` | 10 | maximum number of differing states reported per package |

@@ -23,7 +23,7 @@ var _ = Describe("Config", func() {
 
 	It("parses options", func() {
 		cfg, err := parseConfig("record", []string{"-runs", "1", "-file", "x.ttyframes.json", "-parallel", "2", "-details", "5", "-v", "-strict",
-			"-mask", `\d+ KB=N KB`, "-env", "A=b", "-cols", "80", "-rows", "24", "-timeout", "1m", "./a", "./b"})
+			"-mask", `\d+ KB=N KB`, "-layout", "_2 January 2006", "-env", "A=b", "-cols", "80", "-rows", "24", "-timeout", "1m", "./a", "./b"})
 		Expect(err).To(Succeed())
 		Expect(cfg.runs).To(Equal(1))
 		Expect(cfg.file).To(Equal("x.ttyframes.json"))
@@ -35,6 +35,8 @@ var _ = Describe("Config", func() {
 		Expect(cfg.masks[len(cfg.masks)-1].String()).To(Equal(`\d+ KB=N KB`))
 		Expect(cfg.options).To(Equal(runner.Options{Columns: 80, Rows: 24, Timeout: time.Minute, Env: []string{"A=b"}}))
 		Expect(cfg.patterns).To(Equal([]string{"./a", "./b"}))
+		Expect(cfg.layouts).To(Equal([]string{"_2 January 2006"}))
+		Expect(cfg.comparer).NotTo(BeNil())
 	})
 
 	DescribeTable("rejects invalid arguments",
@@ -46,6 +48,7 @@ var _ = Describe("Config", func() {
 		Entry("invalid runs", "-runs", "0", "."),
 		Entry("invalid mask", "-mask", "x", "."),
 		Entry("invalid environment", "-env", "x", "."),
+		Entry("invalid layout", "-layout", "abc", "."),
 		Entry("unknown option", "-unknown", "."),
 	)
 })

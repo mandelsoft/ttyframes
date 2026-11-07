@@ -36,7 +36,7 @@ func check(cfg *config) int {
 		if err != nil {
 			return checked{err: err}
 		}
-		return checked{expected: expected, actual: actual, result: compare.Compare(expected, actual)}
+		return checked{expected: expected, actual: actual, result: cfg.comparer.Compare(expected, actual)}
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

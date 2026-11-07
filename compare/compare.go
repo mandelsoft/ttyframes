@@ -42,7 +42,7 @@ var (
 	Sampling = &Category{"SAMPLING", false, false,
 		"the same line segments, only in other combinations or with other transitions"}
 	Values = &Category{"VALUES", false, true,
-		"the same line segments up to the values of numbers, for example random values"}
+		"the same line segments up to values (numbers, dates, times and durations), for example random values"}
 	FormatChange = &Category{"FORMAT", true, true,
 		"identical texts (up to the values of numbers) with other output formats"}
 	TextChange = &Category{"TEXT", true, true,
@@ -72,8 +72,39 @@ type Result struct {
 	Changes []Change
 }
 
-// Compare compares an actual behaviour with the expected one.
+// Comparer compares behaviours. It recognizes values according
+// to a ValueMask.
+type Comparer struct {
+	mask *ValueMask
+}
+
+// New provides a comparer recognizing dates and times formatted with
+// the standard layouts and the given additional layouts of package time.
+func New(layouts ...string) (*Comparer, error) {
+	m, err := NewValueMask(layouts...)
+	if err != nil {
+		return nil, err
+	}
+	return &Comparer{m}, nil
+}
+
+// defaultComparer recognizes the standard layouts.
+var defaultComparer = func() *Comparer {
+	c, err := New()
+	if err != nil {
+		panic(err)
+	}
+	return c
+}()
+
+// Compare compares an actual behaviour with the expected one
+// using a comparer for the standard layouts.
 func Compare(expected, actual *behaviour.Behaviour) *Result {
+	return defaultComparer.Compare(expected, actual)
+}
+
+// Compare compares an actual behaviour with the expected one.
+func (c *Comparer) Compare(expected, actual *behaviour.Behaviour) *Result {
 	r := &Result{
 		OnlyExpected:            only(expected.States, actual.States),
 		OnlyActual:              only(actual.States, expected.States),
@@ -89,10 +120,10 @@ func Compare(expected, actual *behaviour.Behaviour) *Result {
 		r.Category = Timing
 	case equalKeys(segments(expected, normalize), segments(actual, normalize)):
 		r.Category = Sampling
-	case equalKeys(segments(expected, maskNumbers), segments(actual, maskNumbers)):
+	case equalKeys(segments(expected, c.maskValues), segments(actual, c.maskValues)):
 		r.Category = Values
 	default:
-		r.Changes = changes(r.OnlyExpected, r.OnlyActual)
+		r.Changes = c.changes(r.OnlyExpected, r.OnlyActual)
 		if len(r.Changes) > 0 {
 			r.Category = FormatChange
 		} else {
@@ -180,13 +211,11 @@ func normalizedTransitions(b *behaviour.Behaviour) map[string]bool {
 	return r
 }
 
-var numbers = regexp.MustCompile(`\d+`)
-
-// maskNumbers provides a normalized state with all numbers replaced by N.
-func maskNumbers(s frames.State) frames.State {
+// maskValues provides a normalized state with all values replaced by N.
+func (c *Comparer) maskValues(s frames.State) frames.State {
 	var r frames.State
 	for _, seg := range normalize(s) {
-		r = append(r, frames.Segment{Text: numbers.ReplaceAllString(seg.Text, "N"), Format: seg.Format})
+		r = append(r, frames.Segment{Text: c.mask.Apply(seg.Text), Format: seg.Format})
 	}
 	return r
 }
@@ -204,17 +233,17 @@ func segments(b *behaviour.Behaviour, prepare func(frames.State) frames.State) m
 }
 
 // changes provides the pairs of states with identical normalized text
-// (up to the values of numbers), but different output formats.
-func changes(expected, actual []frames.State) []Change {
+// (up to values), but different output formats.
+func (c *Comparer) changes(expected, actual []frames.State) []Change {
 	byText := map[string][]frames.State{}
 	for _, s := range expected {
-		t := maskNumbers(s).Text()
+		t := c.maskValues(s).Text()
 		byText[t] = append(byText[t], s)
 	}
 	var r []Change
 	for _, a := range actual {
-		for _, e := range byText[maskNumbers(a).Text()] {
-			if maskNumbers(e).Runs() != maskNumbers(a).Runs() {
+		for _, e := range byText[c.maskValues(a).Text()] {
+			if c.maskValues(e).Runs() != c.maskValues(a).Runs() {
 				r = append(r, Change{e, a})
 			}
 		}

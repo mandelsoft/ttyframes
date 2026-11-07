@@ -2,3 +2,6 @@
 /local
 /tmp
 /.idea
+
+# CLAUDE.md is part of the project (it may be excluded by global git excludes)
+!/CLAUDE.md

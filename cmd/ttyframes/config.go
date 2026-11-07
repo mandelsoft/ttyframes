@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mandelsoft/ttyframes/compare"
 	"github.com/mandelsoft/ttyframes/frames"
 	"github.com/mandelsoft/ttyframes/runner"
 )
@@ -23,8 +24,27 @@ type config struct {
 	verbose  bool
 	strict   bool
 	masks    frames.Masks
+	layouts  []string
+	comparer *compare.Comparer
 	options  runner.Options
 	patterns []string
+}
+
+// layoutsFlag collects additional layouts.
+type layoutsFlag struct {
+	layouts *[]string
+}
+
+func (l layoutsFlag) String() string {
+	if l.layouts == nil {
+		return ""
+	}
+	return strings.Join(*l.layouts, " ")
+}
+
+func (l layoutsFlag) Set(s string) error {
+	*l.layouts = append(*l.layouts, s)
+	return nil
 }
 
 // masksFlag collects additional masks.
@@ -86,6 +106,7 @@ func parseConfig(name string, args []string) (*config, error) {
 	fs.BoolVar(&cfg.verbose, "v", false, "report the differing states for all categories")
 	fs.BoolVar(&cfg.strict, "strict", false, "differences of the values of numbers (category VALUES) are failures")
 	fs.Var(masksFlag{&cfg.masks}, "mask", "additional mask <regexp>=<replacement> for timing dependent values (repeatable)")
+	fs.Var(layoutsFlag{&cfg.layouts}, "layout", "additional layout of package time for dates recognized as values (repeatable)")
 	fs.Var(envFlag{&cfg.options.Env}, "env", "additional environment variable NAME=value for the runs (repeatable)")
 	fs.IntVar(&cfg.options.Columns, "cols", cfg.options.Columns, "number of columns of the pseudo terminal")
 	fs.IntVar(&cfg.options.Rows, "rows", cfg.options.Rows, "number of rows of the pseudo terminal")
@@ -109,5 +130,11 @@ func parseConfig(name string, args []string) (*config, error) {
 		fmt.Fprintln(os.Stderr, err)
 		return nil, err
 	}
+	c, err := compare.New(cfg.layouts...)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return nil, err
+	}
+	cfg.comparer = c
 	return cfg, nil
 }

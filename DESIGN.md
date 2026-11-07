@@ -165,7 +165,8 @@ values with flags for failures and details, not an enumeration.
 
 - `TIMING`: states and transitions are identical after normalizing white space.
 - `SAMPLING`: the sets of normalized segments (texts with output format) are identical.
-- `VALUES`: the sets of normalized segments are identical after masking all numbers.
+- `VALUES`: the sets of normalized segments are identical after masking all values
+  (see Random Values of Programs and Dates and Durations).
 - `FORMAT`: a state only found in one behaviour has the same normalized text (up to the
   values of numbers) as a state only found in the other behaviour, but other output formats.
 - `TEXT`: all other differences.
@@ -179,9 +180,10 @@ number of differences (no meaning).
 
 ## Random Values of Programs
 
-**Decision:** Differences, which disappear when all numbers are masked, are a category of
+**Decision:** Differences, which disappear when all values are masked, are a category of
 their own (`VALUES`). It is no failure by default, but its differing states are reported.
-The option `-strict` makes it a failure.
+The option `-strict` makes it a failure. A value is an optionally signed number followed by
+further numbers separated by `.`, `,`, `:`, `/` or `-`, and it is masked as a whole.
 
 **Reason:** Programs, especially examples, use random values, for example the number of
 steps or the duration of a task. If several goroutines share a random number generator,
@@ -192,7 +194,16 @@ environment. The variation of such values is recognized generically, without con
 The loss of detecting changes of numbers only is made visible by reporting the states,
 and `-strict` covers programs whose numbers must be reproducible.
 
+Masking a value as a whole accepts floating point numbers, dates, times and durations with a
+different number of parts (for example `1:05` and `1:02:03`), which masking every number
+separately would distinguish. The separators also join unrelated numbers (for example a
+range `1-3` or a version `1.2.3`), which is acceptable for a category, which is no failure.
+
 **Alternatives:**
+- *Masking every number separately (the first version):* distinguishes values with a
+  different number of parts, for example durations below and above an hour.
+- *Separate patterns for every kind of value:* more precise, but the kinds of values shown
+  by programs are open-ended, and the distinction is not needed for the classification.
 - *Random sources per task with a seed given by the tool (for example `TTYFRAMES_SEED`):*
   makes the values reproducible, but requires changes of the checked programs, and the
   scheduling of goroutines still influences the timing.
@@ -200,6 +211,31 @@ and `-strict` covers programs whose numbers must be reproducible.
   programs of a check, also where they are relevant.
 - *Masks per program in a configuration file next to the behaviour file:* precise, but
   requires a configuration per program and hides the changes completely (deferred).
+
+## Dates and Durations
+
+**Decision:** Dates and times are recognized according to the layouts of the Go package `time`:
+all standard layouts and additional layouts given with `-layout` in Go layout notation. The
+regular expressions are derived from the layouts by converting their elements (for example
+`2006`, `Jan`, `Mon`, `MST`, `Z07:00`, `.000`, `PM`). Durations are recognized in the format of
+`time.Duration`. Dates and durations are masked before the other values. They are replaced by a
+digit first, so that the values pattern joins them with adjacent parts (for example a fraction
+not covered by a layout) to a single value. Space padded elements (`_2`) at the beginning of a
+layout start with their digits, the padding is kept as text and normalized as white space.
+
+**Reason:** Dates with names (`Sat, 07 Nov 2026 09:05:03 CET`), time zones (`Z`, `+01:00`) or
+`AM`/`PM` and durations with units (`1h2m3.5s`, `250ms`) are not covered by the pattern for
+numbers. Deriving the patterns from layouts covers exactly the formats supported by Go, and
+programs with own formats can describe them in the notation they use to produce them. Names
+are only masked as part of a date, so that changed texts containing names are still detected.
+
+**Alternatives:**
+- *Hand-written regular expressions per format:* error-prone and incomplete, own formats
+  would require regular expressions instead of layouts.
+- *Masking names of months, weekdays and time zones everywhere:* hides changes of texts
+  containing such words.
+- *Parsing every substring with `time.Parse`:* expensive, and the substrings to check would
+  have to be found first.
 
 ## Behaviour File
 
