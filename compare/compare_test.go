@@ -141,9 +141,75 @@ var _ = Describe("Compare", func() {
 		Expect(r.OnlyActual).To(Equal([]frames.State{other}))
 	})
 
+	Context("transient states", func() {
+		// runs provides the merged behaviour of runs.
+		runs := func(rs ...*behaviour.Behaviour) *behaviour.Behaviour {
+			b := rs[0]
+			for _, r := range rs[1:] {
+				b.Merge(r)
+			}
+			return b
+		}
+		setup := frames.State{seg("load ", "")}
+
+		It("tolerates additional transient states", func() {
+			expected := runs(run(a, a, b, b), run(a, a, b, b))
+			actual := runs(run(setup, a, a, b, b), run(a, a, b, b))
+			r := compare.Compare(expected, actual)
+			Expect(r.Category).To(BeIdenticalTo(compare.Transient))
+			Expect(r.Category.Failure).To(BeFalse())
+			Expect(r.Residual).To(BeIdenticalTo(compare.Same))
+			Expect(r.Transient).To(Equal([]frames.State{setup}))
+			Expect(r.OnlyActual).To(Equal([]frames.State{setup}))
+		})
+
+		It("tolerates missing transient states", func() {
+			expected := runs(run(setup, a, a, b, b), run(a, a, b, b))
+			actual := runs(run(a, a, b, b), run(a, a, b, b))
+			r := compare.Compare(expected, actual)
+			Expect(r.Category).To(BeIdenticalTo(compare.Transient))
+			Expect(r.Transient).To(Equal([]frames.State{setup}))
+		})
+
+		It("provides the residual category", func() {
+			other := frames.State{seg("load ", ""), seg("y", "rev=7"), seg(" 7s", "")}
+			expected := runs(run(a, a, b, b), run(a, a, b, b))
+			actual := runs(run(setup, a, a, other, other), run(a, a, other, other))
+			r := compare.Compare(expected, actual)
+			Expect(r.Category).To(BeIdenticalTo(compare.Transient))
+			// other values besides the transient state
+			Expect(r.Residual).To(BeIdenticalTo(compare.Values))
+		})
+
+		It("does not tolerate states shown in all runs", func() {
+			// a deterministic program showing every state in a single frame
+			changed := frames.State{seg("load ", ""), seg("q", "rev=7"), seg(" 5s", "")}
+			expected := runs(run(a, b, c), run(a, b, c))
+			actual := runs(run(a, changed, c), run(a, changed, c))
+			r := compare.Compare(expected, actual)
+			Expect(r.Category).To(BeIdenticalTo(compare.TextChange))
+			Expect(r.Transient).To(BeNil())
+		})
+
+		It("does not tolerate states shown in several frames", func() {
+			expected := runs(run(a, b), run(a, b))
+			actual := runs(run(setup, setup, a, b), run(a, b))
+			Expect(compare.Compare(expected, actual).Category).To(BeIdenticalTo(compare.TextChange))
+		})
+
+		It("does not tolerate other differences", func() {
+			changed := frames.State{seg("load ", ""), seg("q", "rev=7"), seg(" 5s", "")}
+			expected := runs(run(a, a, b, b), run(a, a, b, b))
+			actual := runs(run(setup, a, a, changed, changed), run(a, a, changed, changed))
+			r := compare.Compare(expected, actual)
+			Expect(r.Category).To(BeIdenticalTo(compare.TextChange))
+			Expect(r.Transient).To(BeNil())
+		})
+	})
+
 	It("lists the categories in check order", func() {
 		Expect(compare.Categories).To(Equal([]*compare.Category{
-			compare.Same, compare.Timing, compare.Sampling, compare.Values, compare.FormatChange, compare.TextChange,
+			compare.Same, compare.Timing, compare.Sampling, compare.Values, compare.Transient, compare.FormatChange, compare.TextChange,
 		}))
 		Expect(compare.Timing.String()).To(Equal("TIMING"))
 	})

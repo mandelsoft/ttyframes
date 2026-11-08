@@ -75,12 +75,17 @@ func report(w io.Writer, cfg *config, name string, c checked, counts map[string]
 	if r.Category.Details || cfg.verbose {
 		details(w, cfg, r)
 	}
-	return failure(cfg, r.Category)
+	return failure(cfg, r)
 }
 
-// failure checks whether a category is a failure.
-func failure(cfg *config, c *compare.Category) bool {
-	return c.Failure || (cfg.strict && c == compare.Values)
+// failure checks whether the result of a comparison is a failure.
+// With the option -strict, other values are failures, also for the
+// comparison without transient states.
+func failure(cfg *config, r *compare.Result) bool {
+	if r.Category.Failure {
+		return true
+	}
+	return cfg.strict && (r.Category == compare.Values || r.Residual == compare.Values)
 }
 
 // details reports the differing states.
@@ -104,6 +109,10 @@ func details(w io.Writer, cfg *config, r *compare.Result) {
 			fmt.Fprintf(w, "          %s %s\n", title, e.Key())
 		}
 	}
+	if r.Residual != nil {
+		fmt.Fprintf(w, "          without transient states: %s\n", r.Residual)
+	}
+	states("transient:    ", r.Transient)
 	states("only expected:", r.OnlyExpected)
 	states("only actual:  ", r.OnlyActual)
 }

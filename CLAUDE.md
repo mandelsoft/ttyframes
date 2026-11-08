@@ -14,7 +14,8 @@ working on the project.
 
 - `terminal`: line based terminal emulation with the output format of every character.
 - `frames`: splitting an output into frames, masks for timing dependent values, states.
-- `behaviour`: states and transitions of several runs, the JSON file format.
+- `behaviour`: states and transitions of several runs, the numbers of frames per state and
+  run (transient states), the JSON file format.
 - `compare`: classification of differences, recognition of values (dates via Go layouts,
   durations, numbers).
 - `runner`: listing, building and running main packages in a pseudo terminal (`script`).
@@ -34,6 +35,9 @@ For every change:
 - Keep [DESIGN.md](DESIGN.md) (decisions with reasons and alternatives, deferred topics),
   the README and the godoc consistent with the code.
 - Every source file has a Ginkgo test file of its own, all changes are tested.
+- Every change of the behaviour file format, also a compatible extension, gets a new
+  format version (`behaviour.FormatVersion`), and older versions stay readable (see the
+  section Behaviour File of DESIGN.md).
 - Dependencies are limited to the standard library, `github.com/mandelsoft/ttycolors`
   and Ginkgo/Gomega. Ask before adding others.
 - Commit and push only when requested. After pushing a new version, update the version

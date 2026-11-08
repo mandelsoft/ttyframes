@@ -158,15 +158,18 @@ as for checking. The numbers of frames are only kept as information.
 
 ## Classification
 
-**Decision:** The categories `SAME`, `TIMING`, `SAMPLING`, `VALUES`, `FORMAT` and `TEXT`,
-checked in this order. `FORMAT` and `TEXT` are failures, `VALUES` with the option `-strict`.
-For `VALUES`, `FORMAT` and `TEXT`, the differing states are reported. The categories are
-values with flags for failures and details, not an enumeration.
+**Decision:** The categories `SAME`, `TIMING`, `SAMPLING`, `VALUES`, `TRANSIENT`, `FORMAT` and
+`TEXT`, checked in this order. `FORMAT` and `TEXT` are failures, `VALUES` with the option
+`-strict` (see Transient States for `TRANSIENT`). For `VALUES`, `TRANSIENT`, `FORMAT` and
+`TEXT`, the differing states are reported. The categories are values with flags for failures
+and details, not an enumeration.
 
 - `TIMING`: states and transitions are identical after normalizing white space.
 - `SAMPLING`: the sets of normalized segments (texts with output format) are identical.
 - `VALUES`: the sets of normalized segments are identical after masking all values
   (see Random Values of Programs and Dates and Durations).
+- `TRANSIENT`: the comparison without the differing transient states provides one of the
+  categories before (see Transient States).
 - `FORMAT`: a state only found in one behaviour has the same normalized text (up to the
   values of numbers) as a state only found in the other behaviour, but other output formats.
 - `TEXT`: all other differences.
@@ -212,6 +215,39 @@ range `1-3` or a version `1.2.3`), which is acceptable for a category, which is 
 - *Masks per program in a configuration file next to the behaviour file:* precise, but
   requires a configuration per program and hides the changes completely (deferred).
 
+## Transient States
+
+**Decision:** A state is *transient*, if it is shown in at most one frame of a run and not in
+all runs: a snapshot shown by chance. The behaviour keeps the numbers of frames showing a
+state per run. If the comparison without the differing transient states (of both behaviours)
+provides a category, which is no failure, the result is `TRANSIENT`, with this category as
+residual category. It is no failure; with `-strict`, it is a failure if the residual category
+is `VALUES`. The transient and differing states are reported.
+
+**Reason:** Programs show short-lived intermediate states, which are seen only if a redraw
+happens to fall into them: a line set up step by step (an element added, then variables
+set, then started), or an element already complete, but not yet replaced by its final text.
+The examples of `ttyprogress` (`variables`, `multi`) failed sporadically as `TEXT` because of
+such states, although their behaviour did not change. Real changes are repeated by every
+redraw and shown by every run. The checked programs must not be changed for the check (see
+Random Values of Programs).
+
+**Alternatives:**
+- *Transient as "shown in a single frame" only (the first version):* a deterministic program
+  may show every state in a single frame (for example a sequence of steps), so that all its
+  differences, including real changes, would be removed. Requiring that the state is not
+  shown by all runs distinguishes chance from regular behaviour.
+- *Only the maximum number of frames per state:* cannot tell whether a state was shown by all
+  runs.
+- *Additional states being the beginning of a known state, plus a mask for bar contents
+  configured by the checking project:* two special rules for one kind of difference, and the
+  mask would also hide real changes of the rendering of bars.
+- *Changing the examples (setting the variables before adding an element):* examples are
+  documentation, the test tooling has to be tolerant.
+
+A sporadic error shown only in a single frame of some runs is tolerated, but reported. With
+a single run (`-runs 1`), no state is transient.
+
 ## Dates and Durations
 
 **Decision:** Dates and times are recognized according to the layouts of the Go package `time`:
@@ -251,6 +287,24 @@ line per element keeps the differences reviewed with `git diff` small and readab
 sorting and complete states do. The version marker allows changes of the format. The name
 says that the file is the reference of the comparison, to which tool it belongs and which
 format it has, and it is found next to the program it describes.
+
+The numbers of frames per state (`"frames"` of a state) are optional: files written before
+they were introduced are still read, their states are never transient. The version marker
+was kept (`ttyframes/v1`), because the extension is compatible for reading old files, and the
+tool is pinned by the checking projects. Tool versions before this extension reject a newer
+file because of the unknown attribute; a new version marker would not help them, because
+they decode the file strictly before checking the marker.
+
+Every further change of the format, also a compatible extension, gets a new version marker,
+and the tool keeps reading the older versions. Together with the check of the marker before
+the content, an older tool then reports a newer file as unsupported format instead of an
+unqualified read error. The extension by the numbers of frames is the only one without a new
+marker, because it was introduced before the check order.
+
+The version marker is checked before the content: a file is first read for its marker only,
+and only a supported version is decoded strictly (unknown attributes are errors). Files of
+future versions are therefore reported as unsupported format instead of failing on their new
+attributes.
 
 **Alternatives:**
 - *An own line based text format (the first version):* very readable, but requires an own

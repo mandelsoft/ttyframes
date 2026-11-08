@@ -37,4 +37,63 @@ var _ = Describe("Behaviour", func() {
 		Expect(b.StateKeys()).To(HaveLen(3))
 		Expect(b.TransitionKeys()).To(HaveLen(2))
 	})
+
+	It("counts the frames showing a state per run", func() {
+		b := behaviour.Analyze([]frames.Frame{
+			{st("a"), st("a")},
+			{st("a"), st("b")},
+			{st("c"), st("b")},
+		})
+		Expect(b.StateFrames).To(Equal(map[string][]int{
+			`"a" 0:-`: {2}, // a frame showing a state twice counts once
+			`"b" 0:-`: {2},
+			`"c" 0:-`: {1},
+		}))
+		b.Merge(behaviour.Analyze([]frames.Frame{{st("a")}}))
+		b.Merge(behaviour.Analyze([]frames.Frame{{st("d")}, {st("d")}}))
+		Expect(b.StateFrames).To(Equal(map[string][]int{
+			`"a" 0:-`: {2, 1, 0},
+			`"b" 0:-`: {2, 0, 0},
+			`"c" 0:-`: {1, 0, 0},
+			`"d" 0:-`: {0, 0, 2},
+		}))
+	})
+
+	It("keeps unknown numbers of frames unknown when merging", func() {
+		b := behaviour.New()
+		b.Frames = []int{1}
+		b.States[st("a").Key()] = st("a")
+		b.Merge(behaviour.Analyze([]frames.Frame{{st("a")}, {st("b")}}))
+		Expect(b.StateFrames).To(Equal(map[string][]int{`"b" 0:-`: {0, 1}}))
+	})
+
+	It("detects transient states", func() {
+		b := behaviour.Analyze([]frames.Frame{{st("a")}, {st("b")}, {st("b")}, {st("c")}})
+		b.Merge(behaviour.Analyze([]frames.Frame{{st("b")}, {st("c")}}))
+		// shown in a single frame, but not in all runs
+		Expect(b.Transient(st("a").Key())).To(BeTrue())
+		// shown in several frames of a run
+		Expect(b.Transient(st("b").Key())).To(BeFalse())
+		// shown in all runs
+		Expect(b.Transient(st("c").Key())).To(BeFalse())
+		// unknown state
+		Expect(b.Transient(st("x").Key())).To(BeFalse())
+	})
+
+	It("is not transient for a single run", func() {
+		b := behaviour.Analyze([]frames.Frame{{st("a")}, {st("b")}})
+		Expect(b.Transient(st("a").Key())).To(BeFalse())
+	})
+
+	It("removes states and their transitions", func() {
+		b := behaviour.Analyze([]frames.Frame{{st("a")}, {st("b")}, {st("c")}})
+		r := b.Without(st("b").Key())
+		Expect(r.StateKeys()).To(Equal([]string{`"a" 0:-`, `"c" 0:-`}))
+		Expect(r.TransitionKeys()).To(BeEmpty())
+		Expect(r.StateFrames).To(HaveLen(2))
+		Expect(r.Frames).To(Equal(b.Frames))
+		// the original behaviour is not modified
+		Expect(b.StateKeys()).To(HaveLen(3))
+		Expect(b.TransitionKeys()).To(HaveLen(2))
+	})
 })

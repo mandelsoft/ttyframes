@@ -92,3 +92,30 @@ described in [DESIGN.md](DESIGN.md).
   (it is in my default excludes)"*. `CLAUDE.md` describes the project, its structure, the
   commands and the maintenance rules, and imports the conversation and the design decisions.
   The `.gitignore` contains `!/CLAUDE.md`, which overrides global git excludes.
+
+## 2026-11-08
+
+### Transient States
+
+- Situation: after updating `ttyprogress` to `mdref` v0.5.2, `make check-behaviour` failed in
+  `variables` and `multi` (`TEXT`). Several runs with the old and the new dependencies showed
+  that the failures were sporadic and independent of the update: `variables` showed setup
+  states of a line (variables set before `Start()`), `multi` a complete bar just before its
+  final text, each in a single frame of some runs.
+- The owner confirmed that the test tool has to be tolerant (examples are not changed).
+  Proposal: a category `TRANSIENT` for differences, which disappear when removing states
+  shown in a single frame. Rejected alternative: a prefix rule for incomplete lines plus a
+  mask for bar contents in `ttyprogress`.
+- During the implementation, the tests showed that "a single frame" is not sufficient: a
+  deterministic program may show every state in a single frame, so that real changes would be
+  tolerated. Refined and confirmed: transient states are shown in at most one frame of a run
+  and not in all runs; the behaviour file keeps the numbers of frames per state and run
+  (optional `"frames"` of a state).
+- With `-strict`, `TRANSIENT` is a failure if the residual category is `VALUES`.
+- Question: *"which format version is used now"*: still `ttyframes/v1`, the `"frames"` of a
+  state are an optional extension. A proposed `v2` was withdrawn: older tools decode the file
+  strictly before checking the version, so they would fail on the unknown attribute anyway.
+  Requested instead for further versions: the version is checked before the content, so
+  that files of future versions are reported as unsupported format.
+- Decision of the owner: `v1` is kept for the numbers of frames, but every further format
+  change has to use a new format version, to avoid unqualified read errors.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/mandelsoft/ttyframes/frames"
@@ -21,7 +22,7 @@ const FormatVersion = "ttyframes/v1"
 //	  "format": "ttyframes/v1",
 //	  "frames": [520,521,519],
 //	  "states": [
-//	    {"text":"Downloading... Ns","runs":[{"start":0,"format":{"rev":"7"}},{"start":8}]}
+//	    {"text":"Downloading... Ns","runs":[{"start":0,"format":{"rev":"7"}},{"start":8}],"frames":[12,11,12]}
 //	  ],
 //	  "transitions": [
 //	    {"from":{"text":...,"runs":...},"to":{"text":...,"runs":...}}
@@ -46,6 +47,11 @@ type State struct {
 	// Runs are the output formats of the text.
 	// They are omitted for an empty text.
 	Runs []Run `json:"runs,omitempty"`
+	// Frames are the numbers of frames showing the state in each run
+	// (in the order of the frames of the behaviour). They are only given
+	// for the states of a behaviour, not for the states of transitions,
+	// and they are omitted if unknown.
+	Frames []int `json:"frames,omitempty"`
 }
 
 // Run is the output format starting at a character position of a text.
@@ -113,7 +119,9 @@ func NewFile(b *Behaviour) *File {
 		Transitions: []TransitionDesc{},
 	}
 	for _, k := range b.StateKeys() {
-		f.States = append(f.States, NewState(b.States[k]))
+		s := NewState(b.States[k])
+		s.Frames = append([]int(nil), b.StateFrames[k]...)
+		f.States = append(f.States, s)
 	}
 	for _, k := range b.TransitionKeys() {
 		t := b.Transitions[k]
@@ -125,7 +133,7 @@ func NewFile(b *Behaviour) *File {
 // Behaviour provides the behaviour described by the JSON representation.
 func (f *File) Behaviour() (*Behaviour, error) {
 	if f.Format != FormatVersion {
-		return nil, fmt.Errorf("unsupported format %q (%q expected)", f.Format, FormatVersion)
+		return nil, unsupportedFormat(f.Format)
 	}
 	b := New()
 	b.Frames = f.Frames
@@ -135,6 +143,15 @@ func (f *File) Behaviour() (*Behaviour, error) {
 			return nil, fmt.Errorf("state %d: %w", i, err)
 		}
 		b.States[s.Key()] = s
+		if d.Frames != nil {
+			if len(d.Frames) != len(f.Frames) {
+				return nil, fmt.Errorf("state %d: %d numbers of frames for %d runs", i, len(d.Frames), len(f.Frames))
+			}
+			if slices.ContainsFunc(d.Frames, func(n int) bool { return n < 0 }) {
+				return nil, fmt.Errorf("state %d: negative number of frames", i)
+			}
+			b.StateFrames[s.Key()] = d.Frames
+		}
 	}
 	for i, d := range f.Transitions {
 		from, err := d.From.State()
@@ -195,12 +212,33 @@ func marshal(v any) string {
 
 // Read reads a behaviour in its JSON representation. Any valid JSON
 // representation is accepted, not only the layout written by Write.
+// The format version is checked before the content, so that files of
+// other versions are reported as unsupported, instead of failing on
+// attributes unknown to this version.
 func Read(r io.Reader) (*Behaviour, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read behaviour file: %w", err)
+	}
+	var v struct {
+		Format string `json:"format"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return nil, fmt.Errorf("no behaviour file: %w", err)
+	}
+	if v.Format != FormatVersion {
+		return nil, unsupportedFormat(v.Format)
+	}
 	var f File
-	dec := json.NewDecoder(r)
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
 		return nil, fmt.Errorf("no behaviour file: %w", err)
 	}
 	return f.Behaviour()
+}
+
+// unsupportedFormat provides the error for an unsupported format version.
+func unsupportedFormat(format string) error {
+	return fmt.Errorf("unsupported format %q (%q expected)", format, FormatVersion)
 }

@@ -60,12 +60,15 @@ with the stored one and reports a category per package:
 | `TIMING`   | identical after normalizing white space, for example columns shifted by values of other lengths | no |
 | `SAMPLING` | the same line segments (texts with output format), only in other combinations or with other transitions | no |
 | `VALUES`   | the same line segments up to values (numbers, dates, times and durations), for example random values chosen by the program | no (with `-strict`: yes) |
+| `TRANSIENT` | one of the categories above after removing the differing transient states: states shown by chance, in at most one frame of a run and not in all runs, for example while a line is set up or just before an element shows its final text | no (with `-strict`: yes, if the rest is `VALUES`) |
 | `FORMAT`   | identical texts (up to the values of numbers) with other output formats | yes |
 | `TEXT`     | missing or additional texts | yes |
 | `MISSING`  | no file with the expected behaviour | yes |
 | `ERROR`    | the package could not be built or run | yes |
 
-For `VALUES` and failures, the differing states are reported:
+For `VALUES`, `TRANSIENT` and failures, the differing states are reported. For
+`TRANSIENT`, the category without the transient states and the transient states
+are reported, too:
 
 ```
 FORMAT    examples/progress/linebar: frames 520,521,519/521,520,522, states 22/22 (only expected 8, only actual 8), ...
@@ -111,7 +114,7 @@ Options:
 | `-timeout d` | 3m | maximum duration of a run |
 | `-details n` | 10 | maximum number of differing states reported per package |
 | `-v` | | report the differing states for all categories |
-| `-strict` | | differences of the values of numbers (`VALUES`) are failures |
+| `-strict` | | differences of the values of numbers (`VALUES`, also besides transient states) are failures |
 
 ## Using it in a Project
 
@@ -153,7 +156,7 @@ changes can be reviewed with `git diff`:
   "format": "ttyframes/v1",
   "frames": [520,521,519],
   "states": [
-    {"text":"Downloading...    Ns   N% (100 KB/500 KB)","runs":[{"start":0,"format":{"rev":"7"}},{"start":8},{"start":26,"format":{"fg":"32"}}]}
+    {"text":"Downloading...    Ns   N% (100 KB/500 KB)","runs":[{"start":0,"format":{"rev":"7"}},{"start":8},{"start":26,"format":{"fg":"32"}}],"frames":[12,11,12]}
   ],
   "transitions": [
     {"from":{"text":"Downloading...    Ns   N% (75 KB/500 KB)","runs":[...]},"to":{"text":"Downloading...    Ns   N% (100 KB/500 KB)","runs":[...]}}
@@ -161,13 +164,17 @@ changes can be reviewed with `git diff`:
 }
 ```
 
-- `format` identifies the file format and its version.
+- `format` identifies the file format and its version. Files of other versions are
+  rejected as unsupported format.
 - `frames` are the numbers of frames of the recorded runs (informational only).
 - `states` are the lines of all frames: their text and their `runs`, the output formats
   starting at a character position. A `format` gives the codes of the output format areas
   set there (`hl` highlight, `it` italic, `ul` underline, `bl` blinking, `rev` reverse,
   `inv` invisible, `st` strike through, `ol` overline, `fg`, `bg` and `ulc` foreground,
-  background and underline color), it is omitted for the terminal default.
+  background and underline color), it is omitted for the terminal default. `frames` are
+  the numbers of frames showing the state in each run (in the order of the top-level
+  `frames`). They are used to recognize transient states and are omitted in files written
+  by older versions; states without them are never transient.
 - `transitions` are the changes of a line between consecutive frames.
 
 States and transitions are sorted. Any valid JSON with this structure is accepted,

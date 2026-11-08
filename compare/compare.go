@@ -43,6 +43,8 @@ var (
 		"the same line segments, only in other combinations or with other transitions"}
 	Values = &Category{"VALUES", false, true,
 		"the same line segments up to values (numbers, dates, times and durations), for example random values"}
+	Transient = &Category{"TRANSIENT", false, true,
+		"one of the categories before after removing the differing states shown in a single frame only, for example while a line is set up"}
 	FormatChange = &Category{"FORMAT", true, true,
 		"identical texts (up to the values of numbers) with other output formats"}
 	TextChange = &Category{"TEXT", true, true,
@@ -50,7 +52,7 @@ var (
 )
 
 // Categories lists all categories in the order they are checked.
-var Categories = []*Category{Same, Timing, Sampling, Values, FormatChange, TextChange}
+var Categories = []*Category{Same, Timing, Sampling, Values, Transient, FormatChange, TextChange}
 
 // Change is a pair of states with identical (normalized) text, but
 // different output formats.
@@ -70,6 +72,11 @@ type Result struct {
 	// Changes are the states with changed output formats
 	// (for FormatChange).
 	Changes []Change
+	// Transient are the differing states shown in a single frame only,
+	// and Residual is the category of the comparison without them
+	// (for Transient).
+	Transient []frames.State
+	Residual  *Category
 }
 
 // Comparer compares behaviours. It recognizes values according
@@ -122,6 +129,8 @@ func (c *Comparer) Compare(expected, actual *behaviour.Behaviour) *Result {
 		r.Category = Sampling
 	case equalKeys(segments(expected, c.maskValues), segments(actual, c.maskValues)):
 		r.Category = Values
+	case c.withoutTransient(expected, actual, r):
+		r.Category = Transient
 	default:
 		r.Changes = c.changes(r.OnlyExpected, r.OnlyActual)
 		if len(r.Changes) > 0 {
@@ -131,6 +140,35 @@ func (c *Comparer) Compare(expected, actual *behaviour.Behaviour) *Result {
 		}
 	}
 	return r
+}
+
+// withoutTransient compares the behaviours without the differing states
+// shown in a single frame only. If the result is no failure, it provides
+// the transient states and the residual category in the result.
+func (c *Comparer) withoutTransient(expected, actual *behaviour.Behaviour, r *Result) bool {
+	transient := func(b *behaviour.Behaviour, states []frames.State) ([]string, []frames.State) {
+		var keys []string
+		var found []frames.State
+		for _, s := range states {
+			if b.Transient(s.Key()) {
+				keys = append(keys, s.Key())
+				found = append(found, s)
+			}
+		}
+		return keys, found
+	}
+	ek, es := transient(expected, r.OnlyExpected)
+	ak, as := transient(actual, r.OnlyActual)
+	if len(ek) == 0 && len(ak) == 0 {
+		return false
+	}
+	rest := c.Compare(expected.Without(ek...), actual.Without(ak...))
+	if rest.Category.Failure {
+		return false
+	}
+	r.Transient = append(es, as...)
+	r.Residual = rest.Category
+	return true
 }
 
 // only provides the states of a, which are not in b, sorted by their keys.

@@ -83,6 +83,29 @@ var _ = Describe("Check", func() {
 			Expect(report(&buf, cfg, "ex", c, map[string]int{})).To(BeTrue())
 		})
 
+		It("reports transient states with details, but not as failure", func() {
+			merged := func(fs ...[]frames.Frame) *behaviour.Behaviour {
+				b := behaviour.Analyze(fs[0])
+				for _, f := range fs[1:] {
+					b.Merge(behaviour.Analyze(f))
+				}
+				return b
+			}
+			expected := merged([]frames.Frame{{st("a 1", "")}, {st("a 1", "")}}, []frames.Frame{{st("a 1", "")}, {st("a 1", "")}})
+			actual := merged([]frames.Frame{{st("setup", "")}, {st("a 2", "")}, {st("a 2", "")}}, []frames.Frame{{st("a 2", "")}, {st("a 2", "")}})
+			c := checked{expected: expected, actual: actual, result: compare.Compare(expected, actual)}
+			var buf bytes.Buffer
+			cfg := &config{file: DefaultFile, details: 10}
+			Expect(report(&buf, cfg, "ex", c, map[string]int{})).To(BeFalse())
+			Expect(buf.String()).To(HavePrefix("TRANSIENT ex: "))
+			Expect(buf.String()).To(ContainSubstring("without transient states: VALUES\n"))
+			Expect(buf.String()).To(ContainSubstring(`transient:     "setup" 0:-`))
+
+			// other values besides the transient states are failures with -strict
+			cfg.strict = true
+			Expect(report(&buf, cfg, "ex", c, map[string]int{})).To(BeTrue())
+		})
+
 		It("reports missing files and errors", func() {
 			var buf bytes.Buffer
 			counts := map[string]int{}
@@ -119,8 +142,8 @@ var _ = Describe("Check", func() {
 			Expect(run([]string{"record", "-runs", "1", "./..."})).To(Equal(0))
 			data, err := os.ReadFile(filepath.Join(dir, "anim", DefaultFile))
 			Expect(err).To(Succeed())
-			Expect(string(data)).To(ContainSubstring(`{"text":"N% done","runs":[{"start":0,"format":{"fg":"32"}},{"start":2}]}`))
-			Expect(string(data)).To(ContainSubstring(`{"text":"step 4","runs":[{"start":0}]}`))
+			Expect(string(data)).To(ContainSubstring(`{"text":"N% done","runs":[{"start":0,"format":{"fg":"32"}},{"start":2}],"frames":[5]}`))
+			Expect(string(data)).To(ContainSubstring(`{"text":"step 4","runs":[{"start":0}],"frames":[1]}`))
 		})
 
 		It("checks the behaviour", func() {
